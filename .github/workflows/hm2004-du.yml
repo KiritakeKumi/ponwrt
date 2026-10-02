@@ -1,0 +1,138 @@
+name: Build H3C HM2004-DU
+
+# Builds the HM2004-DU image in the same Docker environment used by
+# ci/remote-build.sh. Pushing a tag (or running the workflow with a tag)
+# also publishes a GitHub release; without a tag the images are only kept
+# as a workflow artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (leave empty to only build an artifact)
+        required: false
+        type: string
+      prerelease:
+        description: Mark as prerelease
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'hm2004-du-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hm2004-du-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  BUILD_CONFIG: configs/hm2004-du.config
+  # Same extra packages as the official release build.
+  EXTRA_CONFIG: configs/release.config
+  IMAGE_DIR: bin/targets/airoha/an7581
+
+jobs:
+  build:
+    name: Build HM2004-DU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      # Full history: scripts/getver.sh needs it, and the version below is derived from it.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Free build space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: ponwrt-dl-hm2004-du-${{ hashFiles('feeds.conf.default', 'configs/*.config') }}
+          restore-keys: |
+            ponwrt-dl-hm2004-du-
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ponwrt-ccache-hm2004-du-${{ github.sha }}
+          restore-keys: |
+            ponwrt-ccache-hm2004-du-
+
+      - name: Set version
+        run: echo "r0+$(git rev-list --count HEAD)-$(git rev-parse --short=10 HEAD)" > version
+
+      - name: Load repository signing key
+        env:
+          PONWRT_APK_PRIVATE_KEY: ${{ secrets.PONWRT_APK_PRIVATE_KEY }}
+        run: |
+          if [ -n "$PONWRT_APK_PRIVATE_KEY" ]; then
+            umask 077
+            printf '%s\n' "$PONWRT_APK_PRIVATE_KEY" > private-key.pem
+            openssl ec -in private-key.pem -pubout -out public-key.pem
+          fi
+
+      - name: Build
+        run: |
+          mkdir -p dl .ccache
+          SRC_DIR="$GITHUB_WORKSPACE" BUILD_UID="$(id -u)" BUILD_GID="$(id -g)" \
+            docker compose -f ci/docker-compose.yml run --rm --build builder
+
+      - name: Collect images
+        run: |
+          mkdir release
+          cp "$IMAGE_DIR"/*h3c_hm2004-du*.itb release/
+          (cd release && sha256sum *.itb > sha256sums)
+          ls -l release
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: ponwrt-hm2004-du
+          path: release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create release
+    needs: build
+    if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download images
+        uses: actions/download-artifact@v4
+        with:
+          name: ponwrt-hm2004-du
+          path: release
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          # Tag pushes have no inputs: treat them as prereleases.
+          PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.prerelease) || 'true' }}
+        run: |
+          args=(
+            "$RELEASE_TAG"
+            release/*.itb
+            release/sha256sums
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "PonWrt HM2004-DU $RELEASE_TAG"
+            --generate-notes
+          )
+          if [ "$PRERELEASE" = true ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
