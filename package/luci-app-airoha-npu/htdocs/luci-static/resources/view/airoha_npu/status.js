@@ -425,7 +425,7 @@ function renderOcControls(soc, ocMin, ocMax) {
 	// The bounds are the backend's, not a second copy of them: it is the side
 	// that enforces them, and its ceiling is configurable.
 	ocMin = parseInt(ocMin) || 500;
-	ocMax = parseInt(ocMax) || 1600;
+	ocMax = parseInt(ocMax) || 900;
 
 	var inp = E('input',{'id':'airoha-npu-oc-input','type':'number','min':String(ocMin),'max':String(ocMax),'step':'50','value':String(Math.min(OC_TESTED_MHZ, ocMax)),'class':'cbi-input-text','style':'width:100px'});
 	var btn = E('button',{'class':'cbi-button cbi-button-action','style':'margin-left:8px','click':function(){

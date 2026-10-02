@@ -27,7 +27,7 @@ CLK_SRC_PLL2=3
 # PCW is an 8 bit field, so the register layout allows far more than the
 # silicon will ever lock at. Kept overridable so a characterisation sweep can
 # look for the real ceiling - rpcd never sets it, so the UI keeps the default.
-: "${AIROHA_OC_MAX_MHZ:=1600}"
+: "${AIROHA_OC_MAX_MHZ:=900}"
 
 # Lower bound: below this the clock switch has nothing useful to select. Not
 # overridable - there is no reason to sweep downwards.

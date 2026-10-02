@@ -330,6 +330,17 @@
 	status = "okay";
 };
 
+/* This unit is an AN7581CT (900 MHz bin): drop the OPPs above 900 MHz that
+ * an7581.dtsi carries for the faster bins, so cpufreq never selects them. */
+&cpu_opp_table {
+	/delete-node/ opp-950000000;
+	/delete-node/ opp-1000000000;
+	/delete-node/ opp-1050000000;
+	/delete-node/ opp-1100000000;
+	/delete-node/ opp-1150000000;
+	/delete-node/ opp-1200000000;
+};
+
 &eth {
 	status = "okay";
 
