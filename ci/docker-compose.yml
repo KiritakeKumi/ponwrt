@@ -1,0 +1,21 @@
+# Usage (from the directory holding the synced source tree):
+#   docker compose -f ci/docker-compose.yml run --rm builder
+# SRC_DIR is the source tree mounted at /work (default: repo root).
+services:
+  builder:
+    build:
+      context: .
+      args:
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-}
+        BUILD_UID: ${BUILD_UID:-1000}
+        BUILD_GID: ${BUILD_GID:-1000}
+    image: ponwrt-builder:local
+    volumes:
+      - ${SRC_DIR:-..}:/work
+    environment:
+      BUILD_CONFIG: ${BUILD_CONFIG:-configs/hm2004-du.config}
+      EXTRA_CONFIG: ${EXTRA_CONFIG:-}
+      JOBS: ${JOBS:-}
+      UPDATE_FEEDS: ${UPDATE_FEEDS:-1}
+      USE_CCACHE: ${USE_CCACHE:-1}
+    # Pass `shell` style overrides with: docker compose run --rm --entrypoint bash builder
