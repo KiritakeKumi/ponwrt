@@ -14,7 +14,11 @@ PKG_SOURCE_URL:=https://www.muppetlabs.com/~breadbox/pub/software
 PKG_SOURCE:=ELFkickers-$(PKG_VERSION).tar.gz
 PKG_HASH:=9b81e6c53e0c94fc198d9882eb737156f36d565152dc32118897c77b06a2687c
 
-PKG_RELEASE:=1
+PKG_RELEASE:=2
+
+# ELFkickers 3.2 relies on tentative definitions; gcc >= 10 defaults to -fno-common
+# (ebfc/Makefile hardcodes CFLAGS, so it has to come from the command line)
+HOST_MAKE_FLAGS += CFLAGS=-fcommon
 
 include $(INCLUDE_DIR)/host-build.mk
 
