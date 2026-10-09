@@ -1,0 +1,72 @@
+From: ponwrt <noreply@ponwrt>
+Subject: [PATCH] net: pcs: airoha: recover RX lock on link up
+
+With an external PHY (EN8811H on HSGMII) the MAC link follows the PHY
+only, so the PCS can stay unlocked while the PHY reports link: the port
+then shows carrier but passes no traffic. The CDR is trained once in the
+bringup, and a PHY SerDes that was not stable yet at that time is never
+retried.
+
+Check the FreqDet lock on every link up of the Ethernet PCS and retrigger
+the CDR while the RX sigdet sees a signal.
+
+--- a/drivers/net/pcs/airoha/pcs-an7581.c
++++ b/drivers/net/pcs/airoha/pcs-an7581.c
+@@ -3469,6 +3469,47 @@
+ 	return 0;
+ }
+ 
++static bool an7581_pcs_have_rx_signal(struct airoha_pcs_priv *priv, int index);
++
++#define AN7581_PCS_LINKUP_LOCK_TRY	5
++
++/* With an external PHY the MAC link follows the PHY only, so the PCS can sit
++ * unlocked while the PHY reports link: the port then shows link up but
++ * passes no traffic. The CDR is only trained once, in the PCS bringup, and a
++ * PHY SerDes that was not yet stable at that time never gets a second
++ * chance. Verify the FreqDet lock on every link up and retrigger the CDR
++ * while the RX sigdet sees a signal.
++ */
++static void an7581_pcs_ensure_rx_lock(struct airoha_pcs_priv *priv, int index)
++{
++	struct regmap *pcs_pma = priv->pcs_pma[index];
++	int try;
++	u32 val;
++
++	for (try = 0; try < AN7581_PCS_LINKUP_LOCK_TRY; try++) {
++		regmap_read(pcs_pma, AIROHA_PCS_PMA_RX_FREQDET, &val);
++		if (val & AIROHA_PCS_PMA_FBCK_LOCK) {
++			if (try)
++				dev_info(priv->dev, "port %d: RX locked after %d CDR reset(s)
++",
++					 index, try);
++			return;
++		}
++
++		if (an7581_pcs_have_rx_signal(priv, index))
++			an7581_pcs_cdr_reset(priv, index, PHY_INTERFACE_MODE_NA,
++					     false);
++
++		msleep(20);
++	}
++
++	regmap_read(pcs_pma, AIROHA_PCS_PMA_RX_FREQDET, &val);
++	if (!(val & AIROHA_PCS_PMA_FBCK_LOCK))
++		dev_warn(priv->dev, "port %d: RX FreqDet not locked after %d tries
++",
++			 index, AN7581_PCS_LINKUP_LOCK_TRY);
++}
++
+ void an7581_pcs_phya_link_up(struct airoha_pcs_priv *priv, int index)
+ {
+ 	struct regmap *pcs_pma = priv->pcs_pma[index];
+@@ -3481,6 +3522,9 @@
+ 
+ 	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_SW_RST_SET,
+ 			AIROHA_PCS_PMA_SW_HSG_TXPCS_RST_N);
++
++	if (priv->data->port_type == AIROHA_PCS_ETH)
++		an7581_pcs_ensure_rx_lock(priv, index);
+ }
+ 
+ static int __an7581_pcs_alloc_regmap_fields(struct airoha_pcs_priv *priv, int index,

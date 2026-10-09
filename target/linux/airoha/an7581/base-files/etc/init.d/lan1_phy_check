@@ -1,0 +1,50 @@
+#!/bin/sh /etc/rc.common
+#
+# H3C HM2004-DU: lan1 is an EN8811H behind HSGMII. If the PHY ended up on a
+# generic driver (module/firmware race) or is stuck without carrier, bind the
+# real driver and bounce the port. Only runs for a few minutes after boot.
+
+START=99
+
+. "$IPKG_INSTROOT/lib/functions.sh"
+
+PHY_DRV="Airoha EN8811H"
+
+phy_driver() {
+	local link=$(readlink /sys/class/net/lan1/phydev/driver 2>/dev/null)
+	echo "${link##*/}"
+}
+
+check_lan1() {
+	local phy drv i
+
+	for i in $(seq 1 60); do
+		[ -e /sys/class/net/lan1/phydev ] && break
+		sleep 2
+	done
+	phy=$(readlink /sys/class/net/lan1/phydev)
+	phy=${phy##*/}
+	[ -n "$phy" ] || return
+
+	for i in $(seq 1 3); do
+		drv=$(phy_driver)
+		[ "$drv" = "$PHY_DRV" ] && return
+
+		logger -t lan1_phy_check "lan1 PHY $phy has driver '${drv:-none}', binding '$PHY_DRV' (try $i)"
+		modprobe air_en8811h 2>/dev/null
+		ip link set lan1 down
+		[ -n "$drv" ] && echo "$phy" > "/sys/bus/mdio_bus/drivers/$drv/unbind" 2>/dev/null
+		echo "$phy" > "/sys/bus/mdio_bus/drivers/$PHY_DRV/bind" 2>/dev/null
+		sleep 1
+		ip link set lan1 up
+		sleep 10
+	done
+}
+
+boot() {
+	case $(board_name) in
+	h3c,hm2004-du)
+		check_lan1 &
+		;;
+	esac
+}

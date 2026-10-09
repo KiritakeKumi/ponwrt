@@ -1,0 +1,87 @@
+From: ponwrt <noreply@ponwrt>
+Subject: [PATCH] net: phy: air_en8811h: retry firmware load and recover a wedged MCU
+
+A failed .probe() leaves the PHY held in reset (no link LED, no link) and
+nothing retries it; a failed MCU restart in .config_init() makes ifup fail
+for good. Retry the firmware load, hardware-resetting the PHY between
+attempts, and reload the firmware when the MCU does not come back.
+
+--- a/drivers/net/phy/air_en8811h.c
++++ b/drivers/net/phy/air_en8811h.c
+@@ -15,7 +15,9 @@
+ #include <linux/clk-provider.h>
+ #include <linux/phy.h>
+ #include <linux/phy/phy-common-props.h>
++#include <linux/delay.h>
+ #include <linux/firmware.h>
++#include <linux/mdio.h>
+ #include <linux/property.h>
+ #include <linux/wordpart.h>
+ #include <linux/unaligned.h>
+@@ -919,6 +921,37 @@
+ 	return devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get, hw);
+ }
+ 
++#define EN8811H_LOAD_TRIES	5
++
++/* The PHY stays in reset after a failed probe (no link LED, no link), and
++ * nothing retries it. Firmware may not be readable yet this early in boot
++ * and the MCU may fail to come up after a reset, so retry, hardware-
++ * resetting the PHY first when it is not a missing-file problem.
++ */
++static int en8811h_load_firmware_retry(struct phy_device *phydev)
++{
++	int ret, try;
++
++	for (try = 0; try < EN8811H_LOAD_TRIES; try++) {
++		ret = en8811h_load_firmware(phydev);
++		if (ret >= 0)
++			return 0;
++
++		if (ret == -ENOENT) {
++			msleep(1000);
++			continue;
++		}
++
++		phydev_warn(phydev, "resetting PHY and retrying firmware load (%d/%d)
++",
++			    try + 1, EN8811H_LOAD_TRIES);
++		mdio_device_reset(&phydev->mdio, 1);
++		mdio_device_reset(&phydev->mdio, 0);
++	}
++
++	return ret;
++}
++
+ static int en8811h_probe(struct phy_device *phydev)
+ {
+ 	struct en8811h_priv *priv;
+@@ -930,7 +963,7 @@
+ 		return -ENOMEM;
+ 	phydev->priv = priv;
+ 
+-	ret = en8811h_load_firmware(phydev);
++	ret = en8811h_load_firmware_retry(phydev);
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -1004,8 +1037,17 @@
+ 	/* If restart happened in .probe(), no need to restart now */
+ 	if (priv->mcu_needs_restart) {
+ 		ret = en8811h_restart_mcu(phydev);
+-		if (ret < 0)
+-			return ret;
++		if (ret < 0) {
++			/* MCU wedged: reset the PHY and reload the firmware */
++			phydev_warn(phydev, "MCU restart failed (%d), reloading firmware
++",
++				    ret);
++			mdio_device_reset(&phydev->mdio, 1);
++			mdio_device_reset(&phydev->mdio, 0);
++			ret = en8811h_load_firmware_retry(phydev);
++			if (ret < 0)
++				return ret;
++		}
+ 	} else {
+ 		/* Next calls to .config_init() mcu needs to restart */
+ 		priv->mcu_needs_restart = true;
