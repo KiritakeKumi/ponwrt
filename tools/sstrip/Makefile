@@ -16,11 +16,11 @@ PKG_HASH:=9b81e6c53e0c94fc198d9882eb737156f36d565152dc32118897c77b06a2687c
 
 PKG_RELEASE:=2
 
+include $(INCLUDE_DIR)/host-build.mk
+
 # ELFkickers 3.2 relies on tentative definitions; gcc >= 10 defaults to -fno-common
 # (ebfc/Makefile hardcodes CFLAGS, so it has to come from the command line)
 HOST_MAKE_FLAGS += CFLAGS=-fcommon
-
-include $(INCLUDE_DIR)/host-build.mk
 
 define Host/Install
 	$(CP) $(HOST_BUILD_DIR)/bin/sstrip $(STAGING_DIR_HOST)/bin/
