@@ -9,10 +9,9 @@ retried.
 
 Check the FreqDet lock on every link up of the Ethernet PCS and retrigger
 the CDR while the RX sigdet sees a signal.
-
 --- a/drivers/net/pcs/airoha/pcs-an7581.c
 +++ b/drivers/net/pcs/airoha/pcs-an7581.c
-@@ -3469,6 +3469,47 @@
+@@ -3469,6 +3469,45 @@
  	return 0;
  }
  
@@ -37,8 +36,7 @@ the CDR while the RX sigdet sees a signal.
 +		regmap_read(pcs_pma, AIROHA_PCS_PMA_RX_FREQDET, &val);
 +		if (val & AIROHA_PCS_PMA_FBCK_LOCK) {
 +			if (try)
-+				dev_info(priv->dev, "port %d: RX locked after %d CDR reset(s)
-+",
++				dev_info(priv->dev, "port %d: RX locked after %d CDR reset(s)\n",
 +					 index, try);
 +			return;
 +		}
@@ -52,15 +50,14 @@ the CDR while the RX sigdet sees a signal.
 +
 +	regmap_read(pcs_pma, AIROHA_PCS_PMA_RX_FREQDET, &val);
 +	if (!(val & AIROHA_PCS_PMA_FBCK_LOCK))
-+		dev_warn(priv->dev, "port %d: RX FreqDet not locked after %d tries
-+",
++		dev_warn(priv->dev, "port %d: RX FreqDet not locked after %d tries\n",
 +			 index, AN7581_PCS_LINKUP_LOCK_TRY);
 +}
 +
  void an7581_pcs_phya_link_up(struct airoha_pcs_priv *priv, int index)
  {
  	struct regmap *pcs_pma = priv->pcs_pma[index];
-@@ -3481,6 +3522,9 @@
+@@ -3481,6 +3520,9 @@
  
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_SW_RST_SET,
  			AIROHA_PCS_PMA_SW_HSG_TXPCS_RST_N);

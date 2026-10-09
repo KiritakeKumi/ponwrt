@@ -5,7 +5,6 @@ A failed .probe() leaves the PHY held in reset (no link LED, no link) and
 nothing retries it; a failed MCU restart in .config_init() makes ifup fail
 for good. Retry the firmware load, hardware-resetting the PHY between
 attempts, and reload the firmware when the MCU does not come back.
-
 --- a/drivers/net/phy/air_en8811h.c
 +++ b/drivers/net/phy/air_en8811h.c
 @@ -15,7 +15,9 @@
@@ -18,7 +17,7 @@ attempts, and reload the firmware when the MCU does not come back.
  #include <linux/property.h>
  #include <linux/wordpart.h>
  #include <linux/unaligned.h>
-@@ -919,6 +921,37 @@
+@@ -919,6 +921,36 @@
  	return devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get, hw);
  }
  
@@ -43,8 +42,7 @@ attempts, and reload the firmware when the MCU does not come back.
 +			continue;
 +		}
 +
-+		phydev_warn(phydev, "resetting PHY and retrying firmware load (%d/%d)
-+",
++		phydev_warn(phydev, "resetting PHY and retrying firmware load (%d/%d)\n",
 +			    try + 1, EN8811H_LOAD_TRIES);
 +		mdio_device_reset(&phydev->mdio, 1);
 +		mdio_device_reset(&phydev->mdio, 0);
@@ -56,7 +54,7 @@ attempts, and reload the firmware when the MCU does not come back.
  static int en8811h_probe(struct phy_device *phydev)
  {
  	struct en8811h_priv *priv;
-@@ -930,7 +963,7 @@
+@@ -930,7 +962,7 @@
  		return -ENOMEM;
  	phydev->priv = priv;
  
@@ -65,7 +63,7 @@ attempts, and reload the firmware when the MCU does not come back.
  	if (ret < 0)
  		return ret;
  
-@@ -1004,8 +1037,17 @@
+@@ -1004,8 +1036,16 @@
  	/* If restart happened in .probe(), no need to restart now */
  	if (priv->mcu_needs_restart) {
  		ret = en8811h_restart_mcu(phydev);
@@ -73,8 +71,7 @@ attempts, and reload the firmware when the MCU does not come back.
 -			return ret;
 +		if (ret < 0) {
 +			/* MCU wedged: reset the PHY and reload the firmware */
-+			phydev_warn(phydev, "MCU restart failed (%d), reloading firmware
-+",
++			phydev_warn(phydev, "MCU restart failed (%d), reloading firmware\n",
 +				    ret);
 +			mdio_device_reset(&phydev->mdio, 1);
 +			mdio_device_reset(&phydev->mdio, 0);
